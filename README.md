@@ -1,11 +1,16 @@
 🚀 QUDOS: Quantum Unified Digital–to–Oscillatory Stack
 
+___________________________________________________________________________________________________
+
 ✨ Kudos for Qudits — building a monolithic, scalable, and efficient oscillatory compute core ✨
+
 
 🌌 Overview
 
 QUDOS is an experimental architecture for hybrid digital–quantum computing.
 The central idea: replace the fragmented pipelines of today’s systems with a unified oscillatory main system — a monolithic core inspired by RISC-like simplicity.
+
+___________________________________________________________________________________________________
 
 🔗 Pipeline Flow:
 
@@ -16,6 +21,8 @@ The central idea: replace the fragmented pipelines of today’s systems with a u
 🎛️ Qudit MCU (Oscillatory Core)
 
 🔄 Output path: Qudit MCU → Qubit Compiler → Digital MCU
+
+___________________________________________________________________________________________________
 
 🎯 Motivation
 
@@ -29,6 +36,8 @@ Why QUDOS?
 
 🌍 Potential path to monolithic, efficient, and scalable quantum cores.
 
+___________________________________________________________________________________________________________
+
 🧠 Core Concepts
 
 🎶 Oscillatory Main System – qudit MCU runs as a continuous wave system, not a patchwork of gates.
@@ -41,14 +50,24 @@ Why QUDOS?
 
 📈 Scalable Efficiency – designed to grow smoothly without exponential complexity spikes.
 
+_____________________________________________________________________________________________________________
+
 📂 Repository Structure
 📄 README.md        → Overview, mission, schematic
+
 📚 docs/            → Architecture notes, encoding schemes, roadmap
+
 📐 theory/          → Math: encoding, compiler abstractions, error/noise models
+
 💻 code/            → Encoders, transpilers, simulation prototypes
+
 📑 papers/          → Whitepapers, outlines, slides
+
 🧪 experiments/     → Mock transpilation, analog mappings, validation datasets
+
 📦 releases/        → v0.1.7 checkpoints & packaged results
+
+________________________________________________________________________________________________________________
 
 🛣️ Roadmap
 
@@ -68,6 +87,8 @@ Why QUDOS?
 
 📊 Validate with FFT, RMS fits, and coevolution models
 
+______________________________________________________________________________________________________________
+
 📖 References
 
 Check QUDOS_preliminary_sources.txt
@@ -86,6 +107,8 @@ Key sources:
 ☁️ IBM / Rigetti / Microsoft Q# / Xanadu docs
 
 🎚️ Low, Yoder, Chuang (2016) on qudit gate control
+
+______________________________________________________________________________________________________________
 
 📜 License
 
