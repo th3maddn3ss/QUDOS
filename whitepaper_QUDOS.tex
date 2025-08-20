@@ -1,0 +1,317 @@
+
+% QUDOS Whitepaper
+% This LaTeX document provides an overview of the QUDOS project and serves as the
+% primary white‑paper for dissemination.  It is intended for publication on
+% Zenodo under the authorship of Devin Lavrisha with ChatGPT listed as a
+% research assistant.
+
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{booktabs}
+\title{QUDOS: A Reduced Instruction Set Approach to Quantum Qudit Control}
+\author{Devin\\,Lavrisha \\\\ ChatGPT (research assistant)}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+QUDOS (Quantum Universal Digital Operator Scheduler) is a proof‑of‑concept
+project implementing a reduced instruction set computer (RISC) style
+instruction set for controlling qudit hardware.  This document describes
+the motivation for using multi‑level qudits over conventional two‑level
+qubits, outlines the design of a compact instruction format and its
+translation into physical waveform schedules, and provides an audit of the
+repository accompanying this white‑paper.  The included example program
+demonstrates the assembly of four high‑level instructions (controlled
+phase, controlled rotation, phase update and rotation) into 32‑bit words
+and the synthesis of these words into a timed schedule of Gaussian
+pulses.  Citations are provided for statements of fact and background
+concepts.
+\end{abstract}
+
+\section{Introduction}
+Quantum information is usually encoded in two–level systems known as
+\emph{qubits}, but physical hardware often possesses more than two
+energy levels.  The ability to exploit higher‑dimensional Hilbert
+spaces leads to \emph{qudits}, multi‑level generalizations of qubits.
+The Entropy Quantum Computing (EQC) paradigm notes that qudits are
+``units of quantum information taking more than 2 possible states,'' and
+that combining superposition with the ability to represent more than two
+levels makes computing with qudits powerful【303900817418565†L31-L35】.
+Another source observes that a qudit can exist in $d$ states while a
+qubit is limited to two; common examples include the qubit ($d=2$),
+qutrit ($d=3$) and ququart ($d=4$)【125270124644100†L29-L38】.  Mathematically
+these states live in a $d$‑dimensional Hilbert space and are described
+by vectors of complex amplitudes that satisfy a normalization
+constraint【125270124644100†L39-L50】.  Because qudits have more degrees of
+freedom, the same problem can often be encoded with fewer physical
+particles; they can also natively express integer and continuous
+variables, allowing problems beyond binary optimisation to be addressed
+【303900817418565†L55-L69】.
+
+Control of a quantum processor relies on accurately sequencing and
+shaping analog waveforms.  In many physical platforms the envelope of
+each control pulse is well approximated by a Gaussian function, i.e.,
+a pulse whose intensity profile has a Gaussian shape【966124329252690†L29-L31】.
+This white‑paper presents a minimal instruction set for qudit
+operations and an associated compiler and scheduler that translate
+high‑level instructions into fixed‑width words and ultimately into a
+timed list of Gaussian pulses and frame updates.
+
+\section{Background}
+
+\subsection{Qudits and Superposition}
+In quantum computing the fundamental resource is superposition: a
+quantum state can exist in a linear combination of basis states at
+once.  For qubits superposition produces a two‑term sum, whereas a
+qudit with dimension $d$ can occupy any superposition of $d$ basis
+states【303900817418565†L75-L79】.  The EQC literature emphasises that
+qudits inherit all capabilities of qubits and add new ones; any qubit
+computation can be expressed in terms of qudits, but qudits can also
+represent integer variables and approximate continuous quantities
+natively【303900817418565†L45-L69】.  Because of these properties, qudits
+are being explored in platforms ranging from superconducting circuits to
+optical multi‑mode encodings【125270124644100†L75-L118】.
+
+\subsection{Reduced Instruction Set Computers}
+The classical RISC philosophy inspired the design of QUDOS.  A reduced
+instruction set computer simplifies the individual instructions given
+to the processor; compared to a complex instruction set computer
+(CISC), more instructions may be required to accomplish the same task,
+but each instruction is simpler and can execute more quickly
+【40348738344627†L188-L205】.  RISC designs typically provide many high‑speed
+registers and separate memory load/store instructions, leading to
+predictable instruction timings and efficient pipelining【40348738344627†L199-L206】.
+These ideas are adapted here to the domain of quantum control: a small
+set of instructions carry the essential information needed to generate
+waveforms while leaving higher‑level sequencing to the compiler.
+
+\section{Instruction Format and Assembly}
+\subsection{Instruction Set}
+The QUDOS instruction set defines four operations:
+\begin{itemize}
+  \item \textbf{\texttt{QCPZ}} – Controlled Phase on target register
+    $r_{\mathrm{t}}$ controlled by register $r_{\mathrm{c}}$ at level $k$ with
+    phase angle $\theta$.
+  \item \textbf{\texttt{QCRT}} – Controlled Rotation on target register
+    $r_{\mathrm{t}}$ controlled by register $r_{\mathrm{c}}$ with indices $i,j$ and
+    level $k$ and rotation angle $\theta$.
+  \item \textbf{\texttt{QPHZ}} – Phase update on register
+    $r_{\mathrm{t}}$ at level $k$ by angle $\theta$.
+  \item \textbf{\texttt{QROT}} – Rotation of register $r_{\mathrm{t}}$ around
+    axes $i,j$ by angle $\theta$.
+\end{itemize}
+
+Each instruction is encoded into a 32‑bit word.  Let $\mathrm{op}$ be
+the 4‑bit opcode, $r_{\mathrm{t}}$ the 4‑bit target register, $r_{\mathrm{c}}$
+the 4‑bit control register, $i,j,k$ four‑bit indices, and let
+$\theta$ be the rotation or phase angle in radians.  The lower eight
+bits store a fixed‑point representation of $\theta$ obtained via
+\begin{equation}
+  t_{\mathrm{f}} = \bigl\lfloor \theta\,S \rceil \bigr\_8,
+\end{equation}
+where $S$ is the \texttt{theta\_fixed\_scale} parameter provided in the
+placement file and $\lfloor \cdot \rceil\_8$ denotes rounding to the
+nearest integer and truncation to eight bits.  The complete word is
+assembled by bit–shifting the fields into place:
+\begin{equation}
+  w_{32} = (\mathrm{op} \ll 28)\;|\;(r_{\mathrm{t}} \ll 24)\;|\;
+  (r_{\mathrm{c}} \ll 20)\;|\;(i \ll 16)\;|\;(j \ll 12)\;|
+  (k \ll 8)\;|\;t_{\mathrm{f}}.
+  \label{eq:pack}
+\end{equation}
+Algorithm~\ref{alg:assemble} summarizes the assembly process.
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.95\linewidth}
+\begin{footnotesize}
+\begin{tabbing}
+\textbf{Algorithm}\quad\=\textsc{AssembleLines}(\textit{lines},\textit{placement})\\
+\textbf{Input:}\>List of instruction strings; placement dictionary\\
+\textbf{Output:}\>List of 32‑bit words and parsed operations\\
+\textbf{1.}\>Load encoding table and scale $S$ from placement file.\\
+\textbf{2.}\>Initialize empty lists for words and operation records.\\
+\textbf{3.}\>For each line $\ell$ in \textit{lines}:\\
+\>\textbf{a.}\>Skip blank lines or comments.\\
+\>\textbf{b.}\>Tokenize $\ell$; determine mnemonic and parse
+parameters.\\
+\>\textbf{c.}\>Compute $t_{\mathrm{f}}=\lfloor \theta S \rceil\_8$.\\
+\>\textbf{d.}\>Compute $w_{32}$ using Eq.~(\ref{eq:pack}).\\
+\>\textbf{e.}\>Append $w_{32}$ to words and append the parsed
+operation to records.\\
+\textbf{4.}\>Return lists of words and operations.
+\end{tabbing}
+\end{footnotesize}
+\end{minipage}
+\end{figure}
+
+\subsection{Example Assembly}
+Consider the program
+\begin{verbatim}
+QCPZ 0, 1, 1, 2, 0.7rad
+QCRT 0, 1, 1, 2, 3, 0.4rad
+QPHZ 1, 2, 15deg
+QROT 1, 1, 2, 10deg
+\end{verbatim}
+running on the placement described in Section~\ref{sec:placement}.  The
+assembler converts each angle specified in degrees or radians into
+radians, multiplies by the scale $S\approx81.4873$ from the YAML
+placement, rounds to the nearest integer and keeps the lower eight
+bits.  Table~\ref{tab:listing} lists the resulting words and parsed
+parameters.  The words expressed in hexadecimal match those produced by
+the provided implementation.
+
+\begin{table}[H]
+\centering
+\caption{Example program listing.\label{tab:listing}}
+\begin{tabular}{@{}llllllll@{}}
+\toprule
+Index & Word$_{16}$ & Kind & $r_t$ & $r_c$ & $i$ & $j$ & $k$ & $\theta$ (rad)\\
+\midrule
+0 & 0x31000139 & QCPZ & 1 & 0 & – & – & 1 & 0.7\\
+1 & 0x41023121 & QCRT & 1 & 0 & 2 & 3 & 1 & 0.4\\
+2 & 0x11000215 & QPHZ & 1 & – & – & – & 2 & 0.2618\\
+3 & 0x2101200e & QROT & 1 & – & 1 & 2 & – & 0.1745\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Waveform Synthesis}
+After assembly, the sequence of parsed operations is converted into a
+time–ordered list of control pulses.  Each pulse has start time
+$t_{0}$, end time $t_{1}$, channel identifier, shape and additional
+parameters.  The scheduler uses three pieces of hardware metadata: the
+time step $\mathrm{dt\_ns}$ in nanoseconds; the Gaussian pulse
+envelope parameters (standard deviation $\sigma$ and total length
+$L$); and a calibration constant $R$ describing the scaling between
+rotation angles and pulse amplitudes.  Algorithm~\ref{alg:sched}
+performs the synthesis.
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.95\linewidth}
+\begin{footnotesize}
+\begin{tabbing}
+\textbf{Algorithm}\quad\=\textsc{SynthQROTZSchedule}(\textit{ops},\textit{placement})\\
+\textbf{Input:}\>List of parsed operations and placement dictionary\\
+\textbf{Output:}\>Time‑ordered list of pulse descriptors\\
+\textbf{1.}\>Initialize time $t=0$~ns and empty schedule.\\
+\textbf{2.}\>For each operation $o$ in \textit{ops}:\\
+\>\textbf{a.}\>Let $r_{\mathrm{t}}$ be the target register.  Map it to its
+ drive channel $c$ via the register mapping.\\
+\>\textbf{b.}\>If $o$ is a rotation (\texttt{QROT} or \texttt{QCRT}):\\
+\>\quad i.\>Compute pulse duration $d=L$ (Gaussian length).\\
+\>\quad ii.\>Compute amplitude $A = R\,|\theta|$.\\
+\>\quad iii.\>Look up frequency $f$ from the appropriate level index.\\
+\>\quad iv.\>Append $\{t, t+d, c, \text{gaussian}, \sigma, A, f\}$ to schedule.\\
+\>\quad v.\>Update $t \leftarrow t + d$.\\
+\>\textbf{c.}\>If $o$ is a phase update (\texttt{QPHZ} or \texttt{QCPZ}):\\
+\>\quad i.\>Append $\{t, t, c, \text{frame\_update}, \phi\}$ to schedule.\\
+\>\textbf{d.}\>Increment $t$ by $\mathrm{dt\_ns}$.\\
+\textbf{3.}\>Return schedule.\\
+\end{tabbing}
+\end{footnotesize}
+\end{minipage}
+\end{figure}
+
+Applying the scheduler to the example program using $\mathrm{dt\_ns}=0.25$~ns,
+Gaussian envelope length $L=6$~ns, $\sigma=1.5$~ns and rotation scale
+$R=1$ produces the schedule listed in Table~\ref{tab:schedule}.  The
+second and fourth rows describe Gaussian pulses applied to drive
+channel $\texttt{d1}$ with amplitudes proportional to the rotation
+angle; the other rows describe instantaneous frame updates.
+
+\begin{table}[H]
+\centering
+\caption{Synthesised waveform schedule for the example program.
+\label{tab:schedule}}
+\begin{tabular}{@{}lllllll@{}}
+\toprule
+$t_0$ (ns) & $t_1$ (ns) & Channel & Shape & $\sigma$ (ns) & Amp & Frequency (Hz)\\
+\midrule
+0.0 & 0.0 & d1 & frame\_update & – & – & –\\
+0.25 & 6.25 & d1 & gaussian & 1.5 & 0.4 & $4.94\times10^9$\\
+6.5 & 6.5 & d1 & frame\_update & – & – & –\\
+6.75 & 12.75 & d1 & gaussian & 1.5 & 0.1745 & $4.92\times10^9$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Repository Audit and Improvements}
+The accompanying repository contains three primary modules:
+\begin{itemize}
+  \item \texttt{quit\_risc\_asm\_yaml.py}: Implements the assembly
+    algorithm.  It reads a YAML or JSON placement file, parses
+    high‑level instructions, converts angles to radians, computes the
+    fixed‑point field using the provided scale and packs the fields
+    according to Eq.~(\ref{eq:pack}).  The implementation supports
+    specifying angles in degrees (suffix \texttt{deg}) or radians
+    (suffix \texttt{rad}) and uses a fallback JSON placement if YAML
+    parsing is unavailable.  The bit masks and shifts are clearly
+    implemented and match the description above.
+  \item \texttt{waveform\_synth.py}: Provides the synthesis algorithm
+    summarised in Algorithm~\ref{alg:sched}.  For rotation operations it
+    computes the pulse amplitude $A=R\,|\theta|$ and reads the
+    appropriate frequency from the register mapping.  For phase
+    operations it issues a zero‑duration frame update.  The code
+    increments the global time by $\mathrm{dt\_ns}$ after every
+    instruction, ensuring correct spacing between pulses.
+  \item \texttt{assemble\_and\_synthesize.py}: A reproducible experiment
+    that loads a placement, assembles a small demonstration program
+    and writes four reports: a JSON file listing the decimal and
+    hexadecimal words, a CSV program listing, and both CSV and JSON
+    versions of the waveform schedule.  Running this script within the
+    repository reproduces the tables shown above and thereby verifies
+    the correctness of the implementation.
+\end{itemize}
+
+\paragraph{Placement files.}  The repository distributes both YAML
+and JSON versions of the placement description.  Minor differences
+exist between them—for example the JSON lists a slightly different
+\texttt{theta\_fixed\_scale} value (81.1690 vs.~81.4873).  For
+consistency we recommend using the YAML version as the canonical
+placement, or documenting the difference and its implications.  Both
+files specify the hardware clock frequency, available arbitrary
+waveform generators (AWGs), register mappings with level frequencies,
+timing parameters, waveform envelope parameters and calibration
+constants.
+
+\paragraph{Recommendations for Zenodo.}  To prepare this project for a
+Zenodo deposit we added a \texttt{README.md} explaining the structure
+and purpose of each file, created this white‑paper (in \LaTeX) and a
+separate PDF documenting the mathematical derivations.  Additional
+improvements could include:
+\begin{itemize}
+  \item Providing a license file (e.g., MIT or Apache‑2.0) to clarify
+    reuse of the code.
+  \item Adding unit tests to verify correct assembly and scheduling for
+    a variety of instructions and placement configurations.
+  \item Including a \texttt{requirements.txt} file listing Python
+    dependencies and supported versions.
+  \item Publishing a DOI by depositing the release on Zenodo with
+    metadata listing the author (Devin Lavrisha) and acknowledging
+    ChatGPT as a research assistant.
+\end{itemize}
+
+\section{Conclusion}
+This white‑paper introduced QUDOS, a minimalist RISC‑inspired
+instruction set for controlling qudit hardware.  By encoding
+instructions into 32‑bit words and translating them into timed lists
+of Gaussian pulses and frame updates, QUDOS provides a bridge between
+high‑level algorithmic descriptions and the low‑level analogue control
+required by quantum hardware.  The example program assembled and
+synthesised here demonstrates the end‑to‑end pipeline: a sequence of
+operations is encoded into machine words and then scheduled into
+control pulses with amplitudes, frequencies and timing derived from
+hardware parameters.  The repository audit highlighted the
+completeness of the current implementation and suggested practical
+steps for enhancing reproducibility and preparing the project for a
+Zenodo release.
+
+\end{document}
